@@ -97,13 +97,13 @@ func main() {
 	}
 
 	port := envOr("PORT", "8000")
-	log.Printf("Auth API listening on http://127.0.0.1:%s", port)
+	// log.Printf("Auth API listening on http://127.0.0.1:%s", port)
 	if !server.googleConfigured() {
 		log.Print("Google sign-in is off until GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set")
 	}
-	if err := http.ListenAndServe("127.0.0.1:"+port, mux); err != nil {
-		log.Fatal(err)
-	}
+	// if err := http.ListenAndServe("127.0.0.1:"+port, mux); err != nil {
+	// 	log.Fatal(err)
+	// }
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
