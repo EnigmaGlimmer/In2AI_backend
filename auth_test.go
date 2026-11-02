@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestSignedTokenRoundTrip(t *testing.T) {
 	server := &Server{secret: []byte("test-secret")}
@@ -33,6 +36,29 @@ func TestAbsoluteOrigin(t *testing.T) {
 	}
 	if got := absoluteRedirect("localhost/api/auth/google/callback", "http://127.0.0.1:3000"); got != "http://127.0.0.1:3000/api/auth/google/callback" {
 		t.Fatalf("relative redirect was not rewritten: %s", got)
+	}
+}
+
+func TestVerificationEmail(t *testing.T) {
+	subject, textBody, htmlBody := verificationEmail("Daniel Goossens", "https://in2ai.biz/verify-email?token=abc")
+	if subject != "Verify your email for In2AI" {
+		t.Fatalf("subject: %s", subject)
+	}
+	for _, part := range []string{
+		"Hello Daniel Goossens,",
+		"Please verify your email address using the link below to continue with In2AI.",
+		"Verify Your Email",
+		"https://in2ai.biz/verify-email?token=abc",
+		"This link expires in 30 minutes.",
+		"In2AI Support Team",
+		"info@in2ai.biz",
+	} {
+		if !strings.Contains(textBody, part) {
+			t.Fatalf("plain text missing %q\n%s", part, textBody)
+		}
+	}
+	if !strings.Contains(htmlBody, `href="https://in2ai.biz/verify-email?token=abc"`) {
+		t.Fatalf("html link missing: %s", htmlBody)
 	}
 }
 

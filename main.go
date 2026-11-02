@@ -30,6 +30,7 @@ type Server struct {
 	googleClientSecret string
 	redirectURL        string
 	resumeDir          string
+	mail               mailConfig
 	attempts           map[string][]time.Time
 	mu                 sync.Mutex
 }
@@ -74,7 +75,11 @@ func main() {
 		googleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
 		redirectURL:        redirectURL,
 		resumeDir:          resumeDir,
+		mail:               loadMailConfig(),
 		attempts:           map[string][]time.Time{},
+	}
+	if !server.mail.configured() {
+		log.Print("Verification email is off until SMTP_HOST, SMTP_USERNAME, and SMTP_PASSWORD are set")
 	}
 
 	mux := http.NewServeMux()
@@ -194,8 +199,8 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setSession(w, user.ID)
-	s.logDevLink("Email confirmation", email, "/verify-email?token="+url.QueryEscape(token))
-	payload := map[string]any{"user": s.publicUser(user)}
+	emailSent := s.sendVerificationEmail(name, email, token)
+	payload := map[string]any{"user": s.publicUser(user), "emailSent": emailSent}
 	if !s.isProd {
 		payload["devVerifyToken"] = token
 	}
@@ -312,12 +317,15 @@ func (s *Server) resendVerification(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "Could not resend the confirmation.")
 		return
 	}
-	s.logDevLink("Email confirmation", current.Email, "/verify-email?token="+url.QueryEscape(token))
-	payload := map[string]any{"ok": true}
-	if !s.isProd {
-		payload["devVerifyToken"] = token
+	if s.sendVerificationEmail(current.Name, current.Email, token) {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "emailSent": true})
+		return
 	}
-	writeJSON(w, http.StatusOK, payload)
+	if !s.isProd {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "emailSent": false, "devVerifyToken": token})
+		return
+	}
+	writeError(w, http.StatusBadGateway, "Could not send the confirmation email. Try again in a moment.")
 }
 
 func (s *Server) verifyEmail(w http.ResponseWriter, r *http.Request) {
@@ -592,6 +600,22 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.ServeFile(w, r, target)
+}
+
+func (s *Server) sendVerificationEmail(name, email, token string) bool {
+	link := s.appOrigin + "/verify-email?token=" + url.QueryEscape(token)
+	subject, textBody, htmlBody := verificationEmail(name, link)
+	if !s.mail.configured() {
+		s.logDevLink("Email confirmation", email, "/verify-email?token="+url.QueryEscape(token))
+		return false
+	}
+	if err := s.mail.send(email, subject, textBody, htmlBody); err != nil {
+		log.Printf("verification email failed for %s: %v", email, err)
+		s.logDevLink("Email confirmation", email, "/verify-email?token="+url.QueryEscape(token))
+		return false
+	}
+	log.Printf("verification email sent to %s", email)
+	return true
 }
 
 func (s *Server) logDevLink(label, email, path string) {
