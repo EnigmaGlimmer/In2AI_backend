@@ -472,6 +472,14 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Resume must be 5 MB or smaller.")
 		return
 	}
+	if r.FormValue("hp_field") != "" {
+		writeError(w, http.StatusBadRequest, "Could not send that application.")
+		return
+	}
+	if r.FormValue("applyMode") == "guest" {
+		s.createGuestApplication(w, r)
+		return
+	}
 	user, ok := s.currentUser(r)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "Create a profile before you apply.")
@@ -479,10 +487,6 @@ func (s *Server) createApplication(w http.ResponseWriter, r *http.Request) {
 	}
 	if !user.EmailVerified {
 		writeError(w, http.StatusForbidden, "Confirm your email before you apply.")
-		return
-	}
-	if r.FormValue("hp_field") != "" {
-		writeError(w, http.StatusBadRequest, "Could not send that application.")
 		return
 	}
 	seat := strings.TrimSpace(r.FormValue("seat"))

@@ -36,6 +36,10 @@ func normalizeJob(job map[string]any) {
 	if company, _ := job["company"].(string); strings.TrimSpace(company) == "" {
 		job["company"] = "In2AI"
 	}
+	if id, _ := job["id"].(string); strings.TrimSpace(id) != "" {
+		job["id"] = strings.TrimSpace(id)
+		job["applyUrl"] = "/careers/" + strings.TrimSpace(id)
+	}
 }
 
 func jobPublishedAt(job map[string]any) time.Time {

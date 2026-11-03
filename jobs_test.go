@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"regexp"
+	"testing"
+)
+
+var opaqueJobID = regexp.MustCompile(`^[0-9a-f]{24}$`)
 
 func TestJobCatalog(t *testing.T) {
 	jobs, err := loadJobs()
@@ -16,8 +21,11 @@ func TestJobCatalog(t *testing.T) {
 	var bidder, support bool
 	for _, job := range jobs {
 		id, _ := job["id"].(string)
-		if id == "" {
-			t.Fatal("job is missing an id")
+		if !opaqueJobID.MatchString(id) {
+			t.Fatalf("job id %q should be an opaque id", id)
+		}
+		if apply, _ := job["applyUrl"].(string); apply != "/careers/"+id {
+			t.Fatalf("apply url = %s", apply)
 		}
 		if _, ok := seen[id]; ok {
 			t.Fatalf("duplicate job id %s", id)
@@ -31,11 +39,12 @@ func TestJobCatalog(t *testing.T) {
 		}
 		role, _ := job["role"].(string)
 		roles[role] = true
-		switch id {
-		case "in2ai-ai-training-support":
+		title, _ := job["title"].(string)
+		switch title {
+		case "AI Training Support Specialist":
 			listed, _ := job["roles"].([]any)
 			support = job["role"] == "consulting" && len(listed) == 2 && listed[0] == "consulting" && listed[1] == "ai-training"
-		case "in2ai-senior-job-bidder":
+		case "Senior Job Bidder — Part-Time Contract":
 			tiers, _ := job["compensationTiers"].([]any)
 			bidder = job["employmentType"] == "Part-time / Contract" && job["isInternal"] == true && len(tiers) == 4
 		}

@@ -81,7 +81,7 @@ func openDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 		);
 		CREATE TABLE IF NOT EXISTS applications (
 			id TEXT PRIMARY KEY,
-			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
 			job_id TEXT NOT NULL DEFAULT '',
 			seat TEXT NOT NULL,
 			note TEXT NOT NULL DEFAULT '',
@@ -91,8 +91,25 @@ func openDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 			degree TEXT NOT NULL DEFAULT '',
 			work_authorization TEXT NOT NULL DEFAULT '',
 			english_fluent TEXT NOT NULL DEFAULT '',
+			first_name TEXT NOT NULL DEFAULT '',
+			last_name TEXT NOT NULL DEFAULT '',
+			email TEXT NOT NULL DEFAULT '',
+			phone TEXT NOT NULL DEFAULT '',
+			whatsapp TEXT NOT NULL DEFAULT '',
+			linkedin TEXT NOT NULL DEFAULT '',
+			date_of_birth TEXT NOT NULL DEFAULT '',
+			gender TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
+		ALTER TABLE applications ALTER COLUMN user_id DROP NOT NULL;
+		ALTER TABLE applications ADD COLUMN IF NOT EXISTS first_name TEXT NOT NULL DEFAULT '';
+		ALTER TABLE applications ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT '';
+		ALTER TABLE applications ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT '';
+		ALTER TABLE applications ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
+		ALTER TABLE applications ADD COLUMN IF NOT EXISTS whatsapp TEXT NOT NULL DEFAULT '';
+		ALTER TABLE applications ADD COLUMN IF NOT EXISTS linkedin TEXT NOT NULL DEFAULT '';
+		ALTER TABLE applications ADD COLUMN IF NOT EXISTS date_of_birth TEXT NOT NULL DEFAULT '';
+		ALTER TABLE applications ADD COLUMN IF NOT EXISTS gender TEXT NOT NULL DEFAULT '';
 	`)
 	if err != nil {
 		pool.Close()
