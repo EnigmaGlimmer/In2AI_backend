@@ -31,6 +31,7 @@ type Server struct {
 	redirectURL        string
 	resumeDir          string
 	mail               mailConfig
+	jobs               []map[string]any
 	attempts           map[string][]time.Time
 	mu                 sync.Mutex
 }
@@ -81,6 +82,11 @@ func main() {
 	if !server.mail.configured() {
 		log.Print("Verification email is off until SMTP_HOST, SMTP_USERNAME, and SMTP_PASSWORD are set")
 	}
+	jobs, err := loadJobs()
+	if err != nil {
+		log.Fatalf("jobs: %v", err)
+	}
+	server.jobs = jobs
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", server.health)
@@ -97,6 +103,8 @@ func main() {
 	mux.HandleFunc("GET /api/auth/google/callback", server.googleCallback)
 	mux.HandleFunc("GET /api/applications", server.listApplications)
 	mux.HandleFunc("POST /api/applications", server.createApplication)
+	mux.HandleFunc("GET /api/jobs", server.listJobs)
+	mux.HandleFunc("GET /api/jobs/{id}", server.getJob)
 	if isProd {
 		mux.HandleFunc("/", server.static)
 	}
