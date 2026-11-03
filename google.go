@@ -169,6 +169,7 @@ func (s *Server) upsertGoogleUser(ctx context.Context, profile googleProfile) (U
 		}
 		existing.GoogleSub = profile.Sub
 		existing.EmailVerified = true
+		s.applyAdmin(ctx, &existing)
 		return existing, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -181,6 +182,7 @@ func (s *Server) upsertGoogleUser(ctx context.Context, profile googleProfile) (U
 		Email:         profile.Email,
 		EmailVerified: true,
 		GoogleSub:     profile.Sub,
+		IsAdmin:       isAdminEmail(profile.Email),
 	}
 	if err := s.insertUser(ctx, user); err != nil {
 		if isUniqueViolation(err) {

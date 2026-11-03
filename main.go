@@ -55,6 +55,9 @@ func main() {
 		log.Fatalf("postgres: %v", err)
 	}
 	defer pool.Close()
+	if err := syncAdminFlags(ctx, pool); err != nil {
+		log.Fatalf("admin flags: %v", err)
+	}
 
 	isProd := os.Getenv("APP_ENV") == "production" || os.Getenv("NODE_ENV") == "production"
 	origin := absoluteOrigin(envOr("APP_ORIGIN", "http://127.0.0.1:3000"))
@@ -105,6 +108,9 @@ func main() {
 	mux.HandleFunc("POST /api/applications", server.createApplication)
 	mux.HandleFunc("GET /api/jobs", server.listJobs)
 	mux.HandleFunc("GET /api/jobs/{id}", server.getJob)
+	mux.HandleFunc("GET /api/admin/users", server.listAdminUsers)
+	mux.HandleFunc("GET /api/admin/applications", server.listAdminApplications)
+	mux.HandleFunc("GET /api/admin/applications/{id}/resume", server.adminResume)
 	if isProd {
 		mux.HandleFunc("/", server.static)
 	}
@@ -139,6 +145,7 @@ func (s *Server) currentUser(r *http.Request) (User, bool) {
 	if err != nil {
 		return User{}, false
 	}
+	s.applyAdmin(r.Context(), &user)
 	return user, true
 }
 
@@ -195,7 +202,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "Could not create that profile.")
 		return
 	}
-	user := User{ID: newID(), Name: name, Email: email, PasswordHash: hash}
+	user := User{ID: newID(), Name: name, Email: email, PasswordHash: hash, IsAdmin: isAdminEmail(email)}
 	token, tokenSum := s.issueToken(user.ID, "verify", 30)
 	user.VerifyHash = tokenSum
 	if err := s.insertUser(r.Context(), user); err != nil {
@@ -239,6 +246,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "Email or password is incorrect.")
 		return
 	}
+	s.applyAdmin(r.Context(), &user)
 	s.setSession(w, user.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"user": s.publicUser(user)})
 }

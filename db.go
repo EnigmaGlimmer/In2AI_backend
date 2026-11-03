@@ -27,6 +27,7 @@ type User struct {
 	WorkAuthorization string
 	EnglishFluent     string
 	Skills            string
+	IsAdmin           bool
 	CreatedAt         time.Time
 }
 
@@ -67,8 +68,10 @@ func openDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 			work_authorization TEXT NOT NULL DEFAULT '',
 			english_fluent TEXT NOT NULL DEFAULT '',
 			skills TEXT NOT NULL DEFAULT '',
+			is_admin BOOLEAN NOT NULL DEFAULT FALSE,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
+		ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
 		CREATE TABLE IF NOT EXISTS applications (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -97,7 +100,7 @@ func scanUser(row pgx.Row) (User, error) {
 	err := row.Scan(
 		&user.ID, &user.Name, &user.Email, &user.PasswordHash, &user.EmailVerified, &googleSub,
 		&user.VerifyHash, &user.ResetHash, &user.Headline, &user.Location, &user.Phone, &user.Bio,
-		&user.Degree, &user.WorkAuthorization, &user.EnglishFluent, &user.Skills, &user.CreatedAt,
+		&user.Degree, &user.WorkAuthorization, &user.EnglishFluent, &user.Skills, &user.IsAdmin, &user.CreatedAt,
 	)
 	if googleSub != nil {
 		user.GoogleSub = *googleSub
@@ -106,7 +109,7 @@ func scanUser(row pgx.Row) (User, error) {
 }
 
 const userColumns = `id, name, email, password_hash, email_verified, google_sub, verify_hash, reset_hash,
-	headline, location, phone, bio, degree, work_authorization, english_fluent, skills, created_at`
+	headline, location, phone, bio, degree, work_authorization, english_fluent, skills, is_admin, created_at`
 
 func (s *Server) userByID(ctx context.Context, id string) (User, error) {
 	return scanUser(s.db.QueryRow(ctx, `SELECT `+userColumns+` FROM users WHERE id=$1`, id))
@@ -127,9 +130,9 @@ func (s *Server) insertUser(ctx context.Context, user User) error {
 	}
 	_, err := s.db.Exec(ctx, `
 		INSERT INTO users (
-			id, name, email, password_hash, email_verified, google_sub, verify_hash, reset_hash
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-	`, user.ID, user.Name, user.Email, user.PasswordHash, user.EmailVerified, googleSub, user.VerifyHash, user.ResetHash)
+			id, name, email, password_hash, email_verified, google_sub, verify_hash, reset_hash, is_admin
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+	`, user.ID, user.Name, user.Email, user.PasswordHash, user.EmailVerified, googleSub, user.VerifyHash, user.ResetHash, user.IsAdmin)
 	return err
 }
 
@@ -157,5 +160,6 @@ func (s *Server) publicUser(user User) map[string]any {
 		"englishFluent":     user.EnglishFluent,
 		"skills":            user.Skills,
 		"provider":          provider,
+		"isAdmin":           user.IsAdmin,
 	}
 }
