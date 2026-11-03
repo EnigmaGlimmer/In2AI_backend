@@ -13,7 +13,7 @@ func TestJobCatalog(t *testing.T) {
 
 	seen := map[string]struct{}{}
 	roles := map[string]bool{}
-	var stripe, javaRole, bidder, support bool
+	var bidder, support bool
 	for _, job := range jobs {
 		id, _ := job["id"].(string)
 		if id == "" {
@@ -23,16 +23,15 @@ func TestJobCatalog(t *testing.T) {
 			t.Fatalf("duplicate job id %s", id)
 		}
 		seen[id] = struct{}{}
+		if company, _ := job["company"].(string); company != "In2AI" {
+			t.Fatalf("%s is not an In2AI listing", id)
+		}
 		if _, ok := job["matchScore"]; ok {
 			t.Fatalf("%s still has matchScore", id)
 		}
 		role, _ := job["role"].(string)
 		roles[role] = true
 		switch id {
-		case "6ab5df8fc6fe0dec811a3959":
-			stripe = job["company"] == "Stripe"
-		case "6aba6188ee0b348be72994e1":
-			javaRole = job["title"] == "Senior Java Full Stack Developer"
 		case "in2ai-ai-training-support":
 			listed, _ := job["roles"].([]any)
 			support = job["role"] == "consulting" && len(listed) == 2 && listed[0] == "consulting" && listed[1] == "ai-training"
@@ -42,12 +41,12 @@ func TestJobCatalog(t *testing.T) {
 		}
 	}
 
-	for _, role := range []string{"consulting", "bidder", "full-stack", "backend", "ai-training", "devops"} {
+	for _, role := range []string{"consulting", "bidder", "ai-training"} {
 		if !roles[role] {
 			t.Fatalf("missing role %s", role)
 		}
 	}
-	if !stripe || !javaRole || !bidder || !support {
-		t.Fatal("expected partner and internal listings were not in the catalog")
+	if len(jobs) != 6 || !bidder || !support {
+		t.Fatal("expected In2AI listings were not in the catalog")
 	}
 }

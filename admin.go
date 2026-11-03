@@ -123,7 +123,7 @@ func (s *Server) listAdminApplications(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		items = append(items, map[string]any{
-			"id": id, "jobId": jobID, "jobTitle": s.jobTitle(jobID), "seat": seat, "note": note,
+			"id": id, "jobId": jobID, "jobTitle": s.jobTitle(r.Context(), jobID), "seat": seat, "note": note,
 			"resumeName": resumeName, "hasResume": resumeName != "", "location": location, "degree": degree,
 			"workAuthorization": workAuthorization, "englishFluent": englishFluent,
 			"createdAt": created.UTC().Format(time.RFC3339),
@@ -158,15 +158,16 @@ func (s *Server) adminResume(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, path)
 }
 
-func (s *Server) jobTitle(id string) string {
-	for _, job := range s.jobs {
-		if jobID, _ := job["id"].(string); jobID == id {
-			if title, ok := job["title"].(string); ok {
-				return title
-			}
-		}
+func (s *Server) jobTitle(ctx context.Context, id string) string {
+	if id == "" {
+		return ""
 	}
-	return ""
+	var title string
+	err := s.db.QueryRow(ctx, `SELECT COALESCE(payload->>'title', '') FROM jobs WHERE id=$1`, id).Scan(&title)
+	if err != nil {
+		return ""
+	}
+	return title
 }
 
 func safeDownloadName(name string) string {

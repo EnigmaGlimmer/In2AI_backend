@@ -31,7 +31,6 @@ type Server struct {
 	redirectURL        string
 	resumeDir          string
 	mail               mailConfig
-	jobs               []map[string]any
 	attempts           map[string][]time.Time
 	mu                 sync.Mutex
 }
@@ -58,6 +57,11 @@ func main() {
 	if err := syncAdminFlags(ctx, pool); err != nil {
 		log.Fatalf("admin flags: %v", err)
 	}
+	synced, err := syncJobs(ctx, pool)
+	if err != nil {
+		log.Fatalf("jobs: %v", err)
+	}
+	log.Printf("synced %d jobs from the committed catalog", synced)
 
 	isProd := os.Getenv("APP_ENV") == "production" || os.Getenv("NODE_ENV") == "production"
 	origin := absoluteOrigin(envOr("APP_ORIGIN", "http://127.0.0.1:3000"))
@@ -85,12 +89,6 @@ func main() {
 	if !server.mail.configured() {
 		log.Print("Verification email is off until SMTP_HOST, SMTP_USERNAME, and SMTP_PASSWORD are set")
 	}
-	jobs, err := loadJobs()
-	if err != nil {
-		log.Fatalf("jobs: %v", err)
-	}
-	server.jobs = jobs
-
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", server.health)
 	mux.HandleFunc("POST /api/auth/register", server.register)
