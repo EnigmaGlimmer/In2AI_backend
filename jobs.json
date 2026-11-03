@@ -1,5 +1,56 @@
 [
   {
+    "id": "in2ai-ai-training-support",
+    "title": "AI Training Support Specialist",
+    "company": "In2AI",
+    "companySize": "51-200 employees",
+    "location": "Remote",
+    "locations": [
+      "United States"
+    ],
+    "isRemote": true,
+    "workModel": "Remote",
+    "seniority": "Entry Level",
+    "employmentType": "Part-time",
+    "publishedAt": "2026-11-03T12:00:00",
+    "publishedLabel": "Today",
+    "salary": "Commission-based: 30% revenue share (around $3k–$5k)",
+    "applicantsText": "Open now",
+    "summary": "A part-time, remote seat supporting In2AI's AI training projects. The hours are flexible and can fit around an existing full-time job.",
+    "responsibilitySummary": "Support daily AI training tasks, coordinate authorized platform work, and join short check-ins",
+    "responsibilities": [
+      "Support the AI training team with basic daily tasks",
+      "Help coordinate authorized AI platform activities",
+      "Respond to team messages and provide updates",
+      "Be available for three or four short check-ins per day",
+      "Follow all platform security and account-use policies"
+    ],
+    "mustHave": [
+      "Based in the United States",
+      "A personal laptop and a stable internet connection",
+      "Good communication skills",
+      "Able to work independently",
+      "Available for short check-ins throughout the day"
+    ],
+    "skills": [
+      "Communication",
+      "Coordination",
+      "AI training support"
+    ],
+    "role": "consulting",
+    "roles": [
+      "consulting",
+      "ai-training"
+    ],
+    "applyUrl": "/careers/in2ai-ai-training-support",
+    "tags": [
+      "Part-time"
+    ],
+    "isInternal": true,
+    "compensationNote": "Revenue-sharing arrangement of 30% of eligible project revenue, subject to a written agreement. Payment terms and calculation methods will be explained before onboarding.",
+    "applyHint": "Tell us you are based in the United States and when you can join short check-ins."
+  },
+  {
     "id": "in2ai-consultant-trainee",
     "title": "Software & IT Consultant Trainee",
     "company": "In2AI",

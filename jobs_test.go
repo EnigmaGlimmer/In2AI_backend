@@ -13,7 +13,7 @@ func TestJobCatalog(t *testing.T) {
 
 	seen := map[string]struct{}{}
 	roles := map[string]bool{}
-	var stripe, javaRole, bidder bool
+	var stripe, javaRole, bidder, support bool
 	for _, job := range jobs {
 		id, _ := job["id"].(string)
 		if id == "" {
@@ -33,6 +33,9 @@ func TestJobCatalog(t *testing.T) {
 			stripe = job["company"] == "Stripe"
 		case "6aba6188ee0b348be72994e1":
 			javaRole = job["title"] == "Senior Java Full Stack Developer"
+		case "in2ai-ai-training-support":
+			listed, _ := job["roles"].([]any)
+			support = job["role"] == "consulting" && len(listed) == 2 && listed[0] == "consulting" && listed[1] == "ai-training"
 		case "in2ai-senior-job-bidder":
 			tiers, _ := job["compensationTiers"].([]any)
 			bidder = job["employmentType"] == "Part-time / Contract" && job["isInternal"] == true && len(tiers) == 4
@@ -44,7 +47,7 @@ func TestJobCatalog(t *testing.T) {
 			t.Fatalf("missing role %s", role)
 		}
 	}
-	if !stripe || !javaRole || !bidder {
+	if !stripe || !javaRole || !bidder || !support {
 		t.Fatal("expected partner and internal listings were not in the catalog")
 	}
 }
