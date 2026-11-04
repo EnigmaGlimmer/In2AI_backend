@@ -62,6 +62,43 @@ func TestVerificationEmail(t *testing.T) {
 	}
 }
 
+func TestApplicationThankYouEmail(t *testing.T) {
+	subject, textBody, htmlBody := applicationThankYouEmail(
+		"Ada",
+		"AI Training Support Specialist",
+		"In2AI",
+		"https://calendly.com/in2ai-info/30min",
+	)
+	if subject != "Thank you for applying to AI Training Support Specialist" {
+		t.Fatalf("subject: %s", subject)
+	}
+	for _, part := range []string{
+		"Hi Ada,",
+		"Thank you for your interest in the AI Training Support Specialist position at In2AI!",
+		"We've received your application and appreciate the time you took to apply.",
+		"Schedule your call: https://calendly.com/in2ai-info/30min",
+		"Google Meet link.",
+		"In2AI Co-Founder",
+		"Thomas Liu",
+	} {
+		if !strings.Contains(textBody, part) {
+			t.Fatalf("plain text missing %q\n%s", part, textBody)
+		}
+	}
+	if !strings.Contains(htmlBody, `<strong>AI Training Support Specialist</strong>`) ||
+		!strings.Contains(htmlBody, `href="https://calendly.com/in2ai-info/30min"`) {
+		t.Fatalf("html missing title or link: %s", htmlBody)
+	}
+
+	_, _, escaped := applicationThankYouEmail(`A<b>da`, "Role", "In2AI", "not a url")
+	if strings.Contains(escaped, "<b>") || !strings.Contains(escaped, "A&lt;b&gt;da") {
+		t.Fatalf("name was not escaped: %s", escaped)
+	}
+	if !strings.Contains(escaped, defaultCalendlyURL) {
+		t.Fatalf("invalid booking link was kept: %s", escaped)
+	}
+}
+
 func TestSafeNext(t *testing.T) {
 	if safeNext("/careers/role") != "/careers/role" {
 		t.Fatal("relative path should pass")

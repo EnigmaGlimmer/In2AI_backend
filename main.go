@@ -31,6 +31,7 @@ type Server struct {
 	redirectURL        string
 	resumeDir          string
 	mail               mailConfig
+	resend             resendConfig
 	attempts           map[string][]time.Time
 	mu                 sync.Mutex
 }
@@ -84,10 +85,14 @@ func main() {
 		redirectURL:        redirectURL,
 		resumeDir:          resumeDir,
 		mail:               loadMailConfig(),
+		resend:             loadResendConfig(),
 		attempts:           map[string][]time.Time{},
 	}
 	if !server.mail.configured() {
 		log.Print("Verification email is off until SMTP_HOST, SMTP_USERNAME, and SMTP_PASSWORD are set")
+	}
+	if !server.resend.configured() {
+		log.Print("Application thank-you email is off until RESEND_API_KEY is set")
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", server.health)

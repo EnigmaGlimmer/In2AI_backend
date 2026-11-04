@@ -68,7 +68,7 @@ func (s *Server) createGuestApplication(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	jobID := strings.TrimSpace(r.FormValue("jobId"))
-	seat := s.jobTitle(r.Context(), jobID)
+	seat, company := s.jobPosting(r.Context(), jobID)
 	if seat == "" {
 		writeError(w, http.StatusBadRequest, "That role is no longer open.")
 		return
@@ -94,6 +94,7 @@ func (s *Server) createGuestApplication(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, "Could not send that application.")
 		return
 	}
+	s.resend.sendApplicationThankYou(fields.Email, fields.FirstName, seat, company)
 	writeJSON(w, http.StatusCreated, map[string]any{"application": map[string]any{
 		"id": id, "jobId": jobID, "seat": seat, "resumeName": resumeName,
 		"createdAt": time.Now().UTC().Format(time.RFC3339),

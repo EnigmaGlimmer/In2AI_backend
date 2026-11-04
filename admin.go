@@ -167,15 +167,32 @@ func (s *Server) adminResume(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) jobTitle(ctx context.Context, id string) string {
-	if id == "" {
-		return ""
-	}
-	var title string
-	err := s.db.QueryRow(ctx, `SELECT COALESCE(payload->>'title', '') FROM jobs WHERE id=$1`, id).Scan(&title)
-	if err != nil {
-		return ""
-	}
+	title, _ := s.jobPosting(ctx, id)
 	return title
+}
+
+func (s *Server) jobPosting(ctx context.Context, id string) (title, company string) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", ""
+	}
+	err := s.db.QueryRow(ctx, `
+		SELECT COALESCE(payload->>'title', ''),
+		       COALESCE(NULLIF(btrim(COALESCE(payload->>'company', '')), ''), 'In2AI')
+		FROM jobs WHERE id=$1
+	`, id).Scan(&title, &company)
+	if err != nil {
+		return "", ""
+	}
+	title = strings.TrimSpace(title)
+	company = strings.TrimSpace(company)
+	if title == "" {
+		return "", ""
+	}
+	if company == "" {
+		company = "In2AI"
+	}
+	return title, company
 }
 
 func safeDownloadName(name string) string {

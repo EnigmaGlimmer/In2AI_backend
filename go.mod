@@ -1,9 +1,10 @@
 module coral/backend
 
-go 1.22
+go 1.23.0
 
 require (
 	github.com/jackc/pgx/v5 v5.7.2
+	github.com/resend/resend-go/v4 v4.12.0
 	golang.org/x/crypto v0.31.0
 )
 
