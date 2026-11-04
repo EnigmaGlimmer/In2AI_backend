@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"errors"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -97,6 +100,71 @@ func (s *Server) listAdminUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"users": items})
 }
 
+func (s *Server) deleteAdminUser(w http.ResponseWriter, r *http.Request) {
+	admin, ok := s.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeError(w, http.StatusNotFound, "User not found.")
+		return
+	}
+	if id == admin.ID {
+		writeError(w, http.StatusBadRequest, "You cannot delete your own account.")
+		return
+	}
+	var isAdmin bool
+	err := s.db.QueryRow(r.Context(), `SELECT is_admin FROM users WHERE id=$1`, id).Scan(&isAdmin)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "User not found.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not delete that user.")
+		return
+	}
+	if isAdmin {
+		writeError(w, http.StatusBadRequest, "Admin accounts cannot be deleted.")
+		return
+	}
+	paths, err := s.resumePathsForUser(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not delete that user.")
+		return
+	}
+	tag, err := s.db.Exec(r.Context(), `DELETE FROM users WHERE id=$1 AND is_admin=FALSE`, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not delete that user.")
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		writeError(w, http.StatusNotFound, "User not found.")
+		return
+	}
+	for _, stored := range paths {
+		s.removeResumeFile(stored)
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) resumePathsForUser(ctx context.Context, userID string) ([]string, error) {
+	rows, err := s.db.Query(ctx, `SELECT resume_path FROM applications WHERE user_id=$1 AND resume_path <> ''`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	paths := make([]string, 0)
+	for rows.Next() {
+		var stored string
+		if err := rows.Scan(&stored); err != nil {
+			return nil, err
+		}
+		paths = append(paths, stored)
+	}
+	return paths, rows.Err()
+}
+
 func (s *Server) listAdminApplications(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireAdmin(w, r); !ok {
 		return
@@ -141,6 +209,25 @@ func (s *Server) listAdminApplications(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"applications": items})
 }
 
+func (s *Server) deleteAdminApplication(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireAdmin(w, r); !ok {
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	var stored string
+	err := s.db.QueryRow(r.Context(), `DELETE FROM applications WHERE id=$1 RETURNING resume_path`, id).Scan(&stored)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "Application not found.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not delete that application.")
+		return
+	}
+	s.removeResumeFile(stored)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 func (s *Server) adminResume(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireAdmin(w, r); !ok {
 		return
@@ -151,10 +238,8 @@ func (s *Server) adminResume(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "Resume not found.")
 		return
 	}
-	stored = filepath.Base(stored)
-	path := filepath.Join(s.resumeDir, stored)
-	rel, err := filepath.Rel(s.resumeDir, path)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	path, ok := resumeFilePath(s.resumeDir, stored)
+	if !ok {
 		writeError(w, http.StatusNotFound, "Resume not found.")
 		return
 	}
@@ -193,6 +278,29 @@ func (s *Server) jobPosting(ctx context.Context, id string) (title, company stri
 		company = "In2AI"
 	}
 	return title, company
+}
+
+func resumeFilePath(dir, stored string) (string, bool) {
+	stored = filepath.Base(strings.TrimSpace(stored))
+	if stored == "" || stored == "." || stored == ".." {
+		return "", false
+	}
+	path := filepath.Join(dir, stored)
+	rel, err := filepath.Rel(dir, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", false
+	}
+	return path, true
+}
+
+func (s *Server) removeResumeFile(stored string) {
+	path, ok := resumeFilePath(s.resumeDir, stored)
+	if !ok {
+		return
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Printf("could not remove resume %s: %v", path, err)
+	}
 }
 
 func safeDownloadName(name string) string {

@@ -112,7 +112,9 @@ func main() {
 	mux.HandleFunc("GET /api/jobs", server.listJobs)
 	mux.HandleFunc("GET /api/jobs/{id}", server.getJob)
 	mux.HandleFunc("GET /api/admin/users", server.listAdminUsers)
+	mux.HandleFunc("DELETE /api/admin/users/{id}", server.deleteAdminUser)
 	mux.HandleFunc("GET /api/admin/applications", server.listAdminApplications)
+	mux.HandleFunc("DELETE /api/admin/applications/{id}", server.deleteAdminApplication)
 	mux.HandleFunc("GET /api/admin/applications/{id}/resume", server.adminResume)
 	if isProd {
 		mux.HandleFunc("/", server.static)

@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestIsAdminEmail(t *testing.T) {
 	t.Setenv("ADMIN_EMAILS", "info@in2ai.biz, us-info@in2ai.biz")
@@ -9,6 +12,24 @@ func TestIsAdminEmail(t *testing.T) {
 	}
 	if isAdminEmail("person@example.com") || isAdminEmail("") {
 		t.Fatal("other addresses should not be admins")
+	}
+}
+
+func TestResumeFilePath(t *testing.T) {
+	dir := t.TempDir()
+	path, ok := resumeFilePath(dir, "../secret.pdf")
+	if !ok || filepath.Base(path) != "secret.pdf" {
+		t.Fatalf("path=%s ok=%v", path, ok)
+	}
+	rel, err := filepath.Rel(dir, path)
+	if err != nil || rel != "secret.pdf" {
+		t.Fatalf("rel=%s err=%v", rel, err)
+	}
+	if _, ok := resumeFilePath(dir, ""); ok {
+		t.Fatal("empty path should be rejected")
+	}
+	if _, ok := resumeFilePath(dir, "."); ok {
+		t.Fatal("dot should be rejected")
 	}
 }
 
