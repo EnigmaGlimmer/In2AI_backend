@@ -116,7 +116,7 @@ type resendConfig struct {
 func loadResendConfig() resendConfig {
 	from := strings.TrimSpace(os.Getenv("RESEND_FROM"))
 	if from == "" {
-		from = "Thomas Liu <" + strings.TrimSpace(envOr("MAIL_FROM", "info@in2ai.biz")) + ">"
+		from = "no-reply <" + strings.TrimSpace(envOr("MAIL_FROM", "info@in2ai.biz")) + ">"
 	}
 	return resendConfig{
 		apiKey:      strings.TrimSpace(os.Getenv("RESEND_API_KEY")),
