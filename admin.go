@@ -389,21 +389,11 @@ func (s *Server) reviewAdminApplication(w http.ResponseWriter, r *http.Request) 
 	err := s.db.QueryRow(r.Context(), `
 		UPDATE applications
 		SET status=$1, reviewed_by=$2, call_type=$3, reviewed_on=$4, rejection_reason=$5
-		WHERE id=$6 AND NOT (status = ANY($7::text[]))
+		WHERE id=$6
 		RETURNING status, call_type, reviewed_on, rejection_reason
-	`, review.Status, review.ViewedBy, review.CallType, review.Date, review.Reason, id, append(append([]string{}, applicationDecisionStatuses...), "reviewed")).Scan(&status, &callType, &reviewedOn, &rejectionReason)
+	`, review.Status, review.ViewedBy, review.CallType, review.Date, review.Reason, id).Scan(&status, &callType, &reviewedOn, &rejectionReason)
 	if errors.Is(err, pgx.ErrNoRows) {
-		var existing string
-		lookupErr := s.db.QueryRow(r.Context(), `SELECT status FROM applications WHERE id=$1`, id).Scan(&existing)
-		if errors.Is(lookupErr, pgx.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "Application not found.")
-			return
-		}
-		if lookupErr != nil {
-			writeError(w, http.StatusInternalServerError, "Could not save that review.")
-			return
-		}
-		writeError(w, http.StatusConflict, "This application is already reviewed.")
+		writeError(w, http.StatusNotFound, "Application not found.")
 		return
 	}
 	if err != nil {
