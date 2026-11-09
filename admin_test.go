@@ -60,6 +60,45 @@ func TestValidateApplicationReview(t *testing.T) {
 	if _, message := validateApplicationReview(applicationReview{ViewedBy: "Ada Admin", CallType: "Phone", Date: "", Status: "Waiting"}); message == "" {
 		t.Fatal("missing review date should be rejected")
 	}
+	sent, message := validateApplicationReview(applicationReview{
+		ViewedBy: "Ada Admin",
+		CallType: "Phone",
+		Date:     today,
+		Status:   "Message sent",
+		Reason:   "ignored",
+	})
+	if message != "" || sent.Status != "Message sent" || sent.Reason != "" {
+		t.Fatalf("message sent review = %#v message = %s", sent, message)
+	}
+	if _, message := validateApplicationReview(applicationReview{ViewedBy: "Ada Admin", CallType: "Phone", Date: today, Status: "Rejected"}); message == "" {
+		t.Fatal("rejected review without a reason should be rejected")
+	}
+	if _, message := validateApplicationReview(applicationReview{ViewedBy: "Ada Admin", CallType: "Phone", Date: today, Status: "Rejected", Reason: "   "}); message == "" {
+		t.Fatal("blank rejection reason should be rejected")
+	}
+	if _, message := validateApplicationReview(applicationReview{ViewedBy: "Ada Admin", CallType: "Phone", Date: today, Status: "Waiting"}); message == "" {
+		t.Fatal("waiting review without a reason should be rejected")
+	}
+	rejected, message := validateApplicationReview(applicationReview{
+		ViewedBy: "Ada Admin",
+		CallType: "Phone",
+		Date:     today,
+		Status:   "Rejected",
+		Reason:   "  Missing work history.  ",
+	})
+	if message != "" || rejected.Reason != "Missing work history." {
+		t.Fatalf("rejected review = %#v message = %s", rejected, message)
+	}
+	waiting, message := validateApplicationReview(applicationReview{
+		ViewedBy: "Ada Admin",
+		CallType: "Phone",
+		Date:     today,
+		Status:   "Waiting",
+		Reason:   "  Waiting on references.  ",
+	})
+	if message != "" || waiting.Reason != "Waiting on references." {
+		t.Fatalf("waiting review = %#v message = %s", waiting, message)
+	}
 }
 
 func TestSafeDownloadName(t *testing.T) {

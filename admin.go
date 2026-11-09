@@ -195,13 +195,14 @@ func (s *Server) listAdminJobViews(w http.ResponseWriter, r *http.Request) {
 
 var applicationCallTypes = []string{"Phone", "WhatsApp", "Video", "In person"}
 
-var applicationDecisionStatuses = []string{"Approved", "Rejected", "Waiting"}
+var applicationDecisionStatuses = []string{"Approved", "Rejected", "Waiting", "Message sent"}
 
 type applicationReview struct {
 	ViewedBy string
 	CallType string
 	Date     string
 	Status   string
+	Reason   string
 }
 
 func validApplicationCallType(value string) bool {
@@ -252,11 +253,32 @@ func validReviewDate(value string) bool {
 	return !parsed.Before(earliest) && !parsed.After(latest)
 }
 
+func reviewNeedsReason(status string) bool {
+	return status == "Rejected" || status == "Waiting"
+}
+
+func cleanReviewReason(value string) (string, string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", "Enter a reason."
+	}
+	if len([]rune(value)) > 500 {
+		return "", "Keep the reason under 500 characters."
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t' {
+			return "", "Enter a reason."
+		}
+	}
+	return value, ""
+}
+
 func validateApplicationReview(in applicationReview) (applicationReview, string) {
 	in.ViewedBy = cleanViewerName(in.ViewedBy)
 	in.CallType = strings.TrimSpace(in.CallType)
 	in.Date = strings.TrimSpace(in.Date)
 	in.Status = strings.TrimSpace(in.Status)
+	in.Reason = strings.TrimSpace(in.Reason)
 	if in.ViewedBy == "" {
 		return in, "Enter who viewed this application."
 	}
@@ -269,6 +291,15 @@ func validateApplicationReview(in applicationReview) (applicationReview, string)
 	if !validApplicationStatus(in.Status) {
 		return in, "Choose a status."
 	}
+	if reviewNeedsReason(in.Status) {
+		reason, message := cleanReviewReason(in.Reason)
+		if message != "" {
+			return in, message
+		}
+		in.Reason = reason
+	} else {
+		in.Reason = ""
+	}
 	return in, ""
 }
 
@@ -280,7 +311,7 @@ func (s *Server) listAdminApplications(w http.ResponseWriter, r *http.Request) {
 		SELECT a.id, a.job_id, a.seat, a.note, a.resume_name, a.location, a.degree, a.work_authorization, a.english_fluent, a.created_at,
 			a.first_name, a.last_name, a.email, a.phone, a.whatsapp, a.linkedin, a.date_of_birth, a.gender, a.heard_about,
 			COALESCE(u.id, ''), COALESCE(u.name, ''), COALESCE(u.email, ''), COALESCE(u.phone, ''),
-			a.status, a.call_type, a.reviewed_on, a.reviewed_by,
+			a.status, a.call_type, a.reviewed_on, a.reviewed_by, a.rejection_reason,
 			COALESCE(reviewer.id, ''), COALESCE(reviewer.name, ''), COALESCE(reviewer.email, '')
 		FROM applications a
 		LEFT JOIN users u ON u.id = a.user_id
@@ -297,13 +328,13 @@ func (s *Server) listAdminApplications(w http.ResponseWriter, r *http.Request) {
 		var id, jobID, seat, note, resumeName, location, degree, workAuthorization, englishFluent string
 		var firstName, lastName, email, phone, whatsapp, linkedin, dateOfBirth, gender, heardAbout string
 		var userID, name, userEmail, userPhone string
-		var status, callType, reviewedOn, reviewedBy, reviewerID, reviewerName, reviewerEmail string
+		var status, callType, reviewedOn, reviewedBy, rejectionReason, reviewerID, reviewerName, reviewerEmail string
 		var created time.Time
 		if err := rows.Scan(
 			&id, &jobID, &seat, &note, &resumeName, &location, &degree, &workAuthorization, &englishFluent, &created,
 			&firstName, &lastName, &email, &phone, &whatsapp, &linkedin, &dateOfBirth, &gender, &heardAbout,
 			&userID, &name, &userEmail, &userPhone,
-			&status, &callType, &reviewedOn, &reviewedBy, &reviewerID, &reviewerName, &reviewerEmail,
+			&status, &callType, &reviewedOn, &reviewedBy, &rejectionReason, &reviewerID, &reviewerName, &reviewerEmail,
 		); err != nil {
 			writeError(w, http.StatusInternalServerError, "Could not load applications.")
 			return
@@ -320,7 +351,7 @@ func (s *Server) listAdminApplications(w http.ResponseWriter, r *http.Request) {
 			"whatsapp": whatsapp, "linkedin": linkedin, "dateOfBirth": dateOfBirth, "gender": gender, "heardAbout": heardAbout,
 			"createdAt": created.UTC().Format(time.RFC3339),
 			"user":      map[string]any{"id": userID, "name": name, "email": userEmail, "phone": userPhone},
-			"status":    status, "callType": callType, "reviewedOn": reviewedOn,
+			"status":    status, "callType": callType, "reviewedOn": reviewedOn, "rejectionReason": rejectionReason,
 			"reviewedBy": map[string]any{"id": reviewerID, "name": reviewerName, "email": reviewerEmail},
 		})
 	}
@@ -337,6 +368,7 @@ func (s *Server) reviewAdminApplication(w http.ResponseWriter, r *http.Request) 
 		CallType string `json:"callType"`
 		Date     string `json:"date"`
 		Status   string `json:"status"`
+		Reason   string `json:"reason"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "Enter who viewed this application, the call type, the date, and the status.")
@@ -347,18 +379,19 @@ func (s *Server) reviewAdminApplication(w http.ResponseWriter, r *http.Request) 
 		CallType: body.CallType,
 		Date:     body.Date,
 		Status:   body.Status,
+		Reason:   body.Reason,
 	})
 	if message != "" {
 		writeError(w, http.StatusBadRequest, message)
 		return
 	}
-	var status, callType, reviewedOn string
+	var status, callType, reviewedOn, rejectionReason string
 	err := s.db.QueryRow(r.Context(), `
 		UPDATE applications
-		SET status=$1, reviewed_by=$2, call_type=$3, reviewed_on=$4
-		WHERE id=$5 AND status NOT IN ('Approved', 'Rejected', 'Waiting', 'reviewed')
-		RETURNING status, call_type, reviewed_on
-	`, review.Status, review.ViewedBy, review.CallType, review.Date, id).Scan(&status, &callType, &reviewedOn)
+		SET status=$1, reviewed_by=$2, call_type=$3, reviewed_on=$4, rejection_reason=$5
+		WHERE id=$6 AND NOT (status = ANY($7::text[]))
+		RETURNING status, call_type, reviewed_on, rejection_reason
+	`, review.Status, review.ViewedBy, review.CallType, review.Date, review.Reason, id, append(append([]string{}, applicationDecisionStatuses...), "reviewed")).Scan(&status, &callType, &reviewedOn, &rejectionReason)
 	if errors.Is(err, pgx.ErrNoRows) {
 		var existing string
 		lookupErr := s.db.QueryRow(r.Context(), `SELECT status FROM applications WHERE id=$1`, id).Scan(&existing)
@@ -379,7 +412,7 @@ func (s *Server) reviewAdminApplication(w http.ResponseWriter, r *http.Request) 
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"application": map[string]any{
-			"id": id, "status": status, "callType": callType, "reviewedOn": reviewedOn,
+			"id": id, "status": status, "callType": callType, "reviewedOn": reviewedOn, "rejectionReason": rejectionReason,
 			"reviewedBy": map[string]any{"id": "", "name": review.ViewedBy, "email": ""},
 		},
 	})
