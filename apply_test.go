@@ -11,6 +11,7 @@ func TestValidateGuestApplication(t *testing.T) {
 		WhatsApp:          "",
 		LinkedIn:          "linkedin.com/in/ada",
 		Location:          "United States",
+		HeardAbout:        "A friend shared the posting",
 		DateOfBirth:       "1990-12-10",
 		WorkAuthorization: "Yes",
 		Gender:            "Female",
@@ -25,6 +26,15 @@ func TestValidateGuestApplication(t *testing.T) {
 	if got.LinkedIn != "https://linkedin.com/in/ada" {
 		t.Fatalf("linkedin = %s", got.LinkedIn)
 	}
+	if got.HeardAbout != "A friend shared the posting" {
+		t.Fatalf("heard about = %s", got.HeardAbout)
+	}
+
+	valid.HeardAbout = "   "
+	if _, message = validateGuestApplication(valid); message == "" {
+		t.Fatal("expected how they heard about the job to be required")
+	}
+	valid.HeardAbout = "A friend shared the posting"
 
 	valid.WorkAuthorization = "Maybe"
 	if _, message = validateGuestApplication(valid); message == "" {

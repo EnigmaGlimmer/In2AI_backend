@@ -41,6 +41,7 @@ type guestApplication struct {
 	WhatsApp          string
 	LinkedIn          string
 	Location          string
+	HeardAbout        string
 	DateOfBirth       string
 	WorkAuthorization string
 	Gender            string
@@ -59,6 +60,7 @@ func (s *Server) createGuestApplication(w http.ResponseWriter, r *http.Request) 
 		WhatsApp:          r.FormValue("whatsapp"),
 		LinkedIn:          r.FormValue("linkedin"),
 		Location:          r.FormValue("location"),
+		HeardAbout:        r.FormValue("heardAbout"),
 		DateOfBirth:       r.FormValue("dateOfBirth"),
 		WorkAuthorization: r.FormValue("workAuthorization"),
 		Gender:            r.FormValue("gender"),
@@ -86,10 +88,10 @@ func (s *Server) createGuestApplication(w http.ResponseWriter, r *http.Request) 
 	_, err = s.db.Exec(r.Context(), `
 		INSERT INTO applications (
 			id, user_id, job_id, seat, resume_name, resume_path, location, work_authorization,
-			first_name, last_name, email, phone, whatsapp, linkedin, date_of_birth, gender
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			first_name, last_name, email, phone, whatsapp, linkedin, date_of_birth, gender, heard_about
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 	`, id, userID, jobID, seat, resumeName, resumePath, fields.Location, fields.WorkAuthorization,
-		fields.FirstName, fields.LastName, fields.Email, fields.Phone, fields.WhatsApp, fields.LinkedIn, fields.DateOfBirth, fields.Gender)
+		fields.FirstName, fields.LastName, fields.Email, fields.Phone, fields.WhatsApp, fields.LinkedIn, fields.DateOfBirth, fields.Gender, fields.HeardAbout)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Could not send that application.")
 		return
@@ -109,6 +111,7 @@ func validateGuestApplication(in guestApplication) (guestApplication, string) {
 	in.WhatsApp = strings.TrimSpace(in.WhatsApp)
 	in.LinkedIn = strings.TrimSpace(in.LinkedIn)
 	in.Location = strings.TrimSpace(in.Location)
+	in.HeardAbout = strings.TrimSpace(in.HeardAbout)
 	in.DateOfBirth = strings.TrimSpace(in.DateOfBirth)
 	in.WorkAuthorization = strings.TrimSpace(in.WorkAuthorization)
 	in.Gender = strings.TrimSpace(in.Gender)
@@ -136,6 +139,9 @@ func validateGuestApplication(in guestApplication) (guestApplication, string) {
 	if !applicationLocations[in.Location] {
 		return in, "Choose your location."
 	}
+	if !validHeardAbout(in.HeardAbout) {
+		return in, "Tell us how you initially heard about this job."
+	}
 	born, err := time.Parse("2006-01-02", in.DateOfBirth)
 	if err != nil || !born.Before(time.Now()) || born.Year() < 1920 {
 		return in, "Enter a valid date of birth."
@@ -160,6 +166,18 @@ func cleanPersonName(value string) string {
 		}
 	}
 	return value
+}
+
+func validHeardAbout(value string) bool {
+	if value == "" || len(value) > 500 {
+		return false
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
 }
 
 func validPhone(value string) bool {
