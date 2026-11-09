@@ -111,6 +111,8 @@ func main() {
 	mux.HandleFunc("POST /api/applications", server.createApplication)
 	mux.HandleFunc("GET /api/jobs", server.listJobs)
 	mux.HandleFunc("GET /api/jobs/{id}", server.getJob)
+	mux.HandleFunc("POST /api/jobs/{id}/view", server.recordJobView)
+	mux.HandleFunc("GET /api/admin/job-views", server.listAdminJobViews)
 	mux.HandleFunc("GET /api/admin/users", server.listAdminUsers)
 	mux.HandleFunc("DELETE /api/admin/users/{id}", server.deleteAdminUser)
 	mux.HandleFunc("GET /api/admin/applications", server.listAdminApplications)

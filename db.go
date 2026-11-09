@@ -79,6 +79,10 @@ func openDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
+		CREATE TABLE IF NOT EXISTS job_views (
+			job_id TEXT PRIMARY KEY,
+			view_count BIGINT NOT NULL DEFAULT 0
+		);
 		CREATE TABLE IF NOT EXISTS applications (
 			id TEXT PRIMARY KEY,
 			user_id TEXT REFERENCES users(id) ON DELETE CASCADE,

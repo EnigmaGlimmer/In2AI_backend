@@ -165,6 +165,33 @@ func (s *Server) resumePathsForUser(ctx context.Context, userID string) ([]strin
 	return paths, rows.Err()
 }
 
+func (s *Server) listAdminJobViews(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireAdmin(w, r); !ok {
+		return
+	}
+	rows, err := s.db.Query(r.Context(), `SELECT job_id, view_count FROM job_views ORDER BY job_id`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not load role views.")
+		return
+	}
+	defer rows.Close()
+	items := make([]map[string]any, 0)
+	for rows.Next() {
+		var jobID string
+		var count int64
+		if err := rows.Scan(&jobID, &count); err != nil {
+			writeError(w, http.StatusInternalServerError, "Could not load role views.")
+			return
+		}
+		items = append(items, map[string]any{"jobId": jobID, "count": count})
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not load role views.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"views": items})
+}
+
 func (s *Server) listAdminApplications(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireAdmin(w, r); !ok {
 		return

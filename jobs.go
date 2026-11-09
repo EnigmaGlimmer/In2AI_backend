@@ -111,6 +111,32 @@ func (s *Server) listJobs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"jobs": jobs})
 }
 
+func (s *Server) recordJobView(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeError(w, http.StatusNotFound, "Role not found.")
+		return
+	}
+	if !s.allow("view:"+clientIP(r)+":"+id, 30, time.Minute) {
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		return
+	}
+	tag, err := s.db.Exec(r.Context(), `
+		INSERT INTO job_views (job_id, view_count)
+		SELECT id, 1 FROM jobs WHERE id=$1
+		ON CONFLICT (job_id) DO UPDATE SET view_count = job_views.view_count + 1
+	`, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not record that view.")
+		return
+	}
+	if tag.RowsAffected() == 0 {
+		writeError(w, http.StatusNotFound, "Role not found.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 func (s *Server) getJob(w http.ResponseWriter, r *http.Request) {
 	var raw []byte
 	err := s.db.QueryRow(r.Context(), `SELECT payload FROM jobs WHERE id=$1`, r.PathValue("id")).Scan(&raw)
