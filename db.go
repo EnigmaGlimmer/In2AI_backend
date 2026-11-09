@@ -104,6 +104,10 @@ func openDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 			date_of_birth TEXT NOT NULL DEFAULT '',
 			gender TEXT NOT NULL DEFAULT '',
 			heard_about TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT 'new',
+			reviewed_by TEXT NOT NULL DEFAULT '',
+			call_type TEXT NOT NULL DEFAULT '',
+			reviewed_on TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
 		ALTER TABLE applications ALTER COLUMN user_id DROP NOT NULL;
@@ -116,6 +120,10 @@ func openDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 		ALTER TABLE applications ADD COLUMN IF NOT EXISTS date_of_birth TEXT NOT NULL DEFAULT '';
 		ALTER TABLE applications ADD COLUMN IF NOT EXISTS gender TEXT NOT NULL DEFAULT '';
 		ALTER TABLE applications ADD COLUMN IF NOT EXISTS heard_about TEXT NOT NULL DEFAULT '';
+		ALTER TABLE applications ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'new';
+		ALTER TABLE applications ADD COLUMN IF NOT EXISTS reviewed_by TEXT NOT NULL DEFAULT '';
+		ALTER TABLE applications ADD COLUMN IF NOT EXISTS call_type TEXT NOT NULL DEFAULT '';
+		ALTER TABLE applications ADD COLUMN IF NOT EXISTS reviewed_on TEXT NOT NULL DEFAULT '';
 	`)
 	if err != nil {
 		pool.Close()

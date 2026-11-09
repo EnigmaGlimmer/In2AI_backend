@@ -3,6 +3,7 @@ package main
 import (
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestIsAdminEmail(t *testing.T) {
@@ -30,6 +31,34 @@ func TestResumeFilePath(t *testing.T) {
 	}
 	if _, ok := resumeFilePath(dir, "."); ok {
 		t.Fatal("dot should be rejected")
+	}
+}
+
+func TestValidateApplicationReview(t *testing.T) {
+	today := time.Now().UTC().Format("2006-01-02")
+	ok, message := validateApplicationReview(applicationReview{
+		ViewedBy: "  Ada Admin  ",
+		CallType: "WhatsApp",
+		Date:     today,
+		Status:   "Approved",
+	})
+	if message != "" || ok.ViewedBy != "Ada Admin" || ok.CallType != "WhatsApp" || ok.Date != today || ok.Status != "Approved" {
+		t.Fatalf("review = %#v message = %s", ok, message)
+	}
+	if _, message := validateApplicationReview(applicationReview{ViewedBy: "   ", CallType: "Phone", Date: today, Status: "Waiting"}); message == "" {
+		t.Fatal("blank viewer name should be rejected")
+	}
+	if _, message := validateApplicationReview(applicationReview{ViewedBy: "Ada Admin", CallType: "Email", Date: today, Status: "Rejected"}); message == "" {
+		t.Fatal("unknown call type should be rejected")
+	}
+	if _, message := validateApplicationReview(applicationReview{ViewedBy: "Ada Admin", CallType: "Phone", Date: today, Status: "Maybe"}); message == "" {
+		t.Fatal("unknown status should be rejected")
+	}
+	if _, message := validateApplicationReview(applicationReview{ViewedBy: "Ada Admin", CallType: "Phone", Date: "2019-01-01", Status: "Waiting"}); message == "" {
+		t.Fatal("review date before 2020 should be rejected")
+	}
+	if _, message := validateApplicationReview(applicationReview{ViewedBy: "Ada Admin", CallType: "Phone", Date: "", Status: "Waiting"}); message == "" {
+		t.Fatal("missing review date should be rejected")
 	}
 }
 

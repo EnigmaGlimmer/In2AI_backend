@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -192,6 +193,85 @@ func (s *Server) listAdminJobViews(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"views": items})
 }
 
+var applicationCallTypes = []string{"Phone", "WhatsApp", "Video", "In person"}
+
+var applicationDecisionStatuses = []string{"Approved", "Rejected", "Waiting"}
+
+type applicationReview struct {
+	ViewedBy string
+	CallType string
+	Date     string
+	Status   string
+}
+
+func validApplicationCallType(value string) bool {
+	for _, item := range applicationCallTypes {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
+func validApplicationStatus(value string) bool {
+	for _, item := range applicationDecisionStatuses {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeApplicationStatus(status string) string {
+	if validApplicationStatus(status) || status == "reviewed" {
+		return status
+	}
+	return "new"
+}
+
+func cleanViewerName(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 80 {
+		return ""
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return ""
+		}
+	}
+	return value
+}
+
+func validReviewDate(value string) bool {
+	parsed, err := time.Parse("2006-01-02", value)
+	if err != nil || parsed.Format("2006-01-02") != value {
+		return false
+	}
+	earliest := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	latest := time.Now().UTC().AddDate(1, 0, 1)
+	return !parsed.Before(earliest) && !parsed.After(latest)
+}
+
+func validateApplicationReview(in applicationReview) (applicationReview, string) {
+	in.ViewedBy = cleanViewerName(in.ViewedBy)
+	in.CallType = strings.TrimSpace(in.CallType)
+	in.Date = strings.TrimSpace(in.Date)
+	in.Status = strings.TrimSpace(in.Status)
+	if in.ViewedBy == "" {
+		return in, "Enter who viewed this application."
+	}
+	if !validApplicationCallType(in.CallType) {
+		return in, "Choose a call type."
+	}
+	if !validReviewDate(in.Date) {
+		return in, "Enter the review date."
+	}
+	if !validApplicationStatus(in.Status) {
+		return in, "Choose a status."
+	}
+	return in, ""
+}
+
 func (s *Server) listAdminApplications(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.requireAdmin(w, r); !ok {
 		return
@@ -199,9 +279,12 @@ func (s *Server) listAdminApplications(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(r.Context(), `
 		SELECT a.id, a.job_id, a.seat, a.note, a.resume_name, a.location, a.degree, a.work_authorization, a.english_fluent, a.created_at,
 			a.first_name, a.last_name, a.email, a.phone, a.whatsapp, a.linkedin, a.date_of_birth, a.gender, a.heard_about,
-			COALESCE(u.id, ''), COALESCE(u.name, ''), COALESCE(u.email, ''), COALESCE(u.phone, '')
+			COALESCE(u.id, ''), COALESCE(u.name, ''), COALESCE(u.email, ''), COALESCE(u.phone, ''),
+			a.status, a.call_type, a.reviewed_on, a.reviewed_by,
+			COALESCE(reviewer.id, ''), COALESCE(reviewer.name, ''), COALESCE(reviewer.email, '')
 		FROM applications a
 		LEFT JOIN users u ON u.id = a.user_id
+		LEFT JOIN users reviewer ON reviewer.id = a.reviewed_by
 		ORDER BY a.created_at DESC
 	`)
 	if err != nil {
@@ -214,14 +297,20 @@ func (s *Server) listAdminApplications(w http.ResponseWriter, r *http.Request) {
 		var id, jobID, seat, note, resumeName, location, degree, workAuthorization, englishFluent string
 		var firstName, lastName, email, phone, whatsapp, linkedin, dateOfBirth, gender, heardAbout string
 		var userID, name, userEmail, userPhone string
+		var status, callType, reviewedOn, reviewedBy, reviewerID, reviewerName, reviewerEmail string
 		var created time.Time
 		if err := rows.Scan(
 			&id, &jobID, &seat, &note, &resumeName, &location, &degree, &workAuthorization, &englishFluent, &created,
 			&firstName, &lastName, &email, &phone, &whatsapp, &linkedin, &dateOfBirth, &gender, &heardAbout,
 			&userID, &name, &userEmail, &userPhone,
+			&status, &callType, &reviewedOn, &reviewedBy, &reviewerID, &reviewerName, &reviewerEmail,
 		); err != nil {
 			writeError(w, http.StatusInternalServerError, "Could not load applications.")
 			return
+		}
+		status = normalizeApplicationStatus(status)
+		if reviewerName == "" {
+			reviewerName = reviewedBy
 		}
 		items = append(items, map[string]any{
 			"id": id, "jobId": jobID, "jobTitle": s.jobTitle(r.Context(), jobID), "seat": seat, "note": note,
@@ -231,9 +320,69 @@ func (s *Server) listAdminApplications(w http.ResponseWriter, r *http.Request) {
 			"whatsapp": whatsapp, "linkedin": linkedin, "dateOfBirth": dateOfBirth, "gender": gender, "heardAbout": heardAbout,
 			"createdAt": created.UTC().Format(time.RFC3339),
 			"user":      map[string]any{"id": userID, "name": name, "email": userEmail, "phone": userPhone},
+			"status":    status, "callType": callType, "reviewedOn": reviewedOn,
+			"reviewedBy": map[string]any{"id": reviewerID, "name": reviewerName, "email": reviewerEmail},
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"applications": items})
+}
+
+func (s *Server) reviewAdminApplication(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireAdmin(w, r); !ok {
+		return
+	}
+	id := strings.TrimSpace(r.PathValue("id"))
+	var body struct {
+		ViewedBy string `json:"viewedBy"`
+		CallType string `json:"callType"`
+		Date     string `json:"date"`
+		Status   string `json:"status"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "Enter who viewed this application, the call type, the date, and the status.")
+		return
+	}
+	review, message := validateApplicationReview(applicationReview{
+		ViewedBy: body.ViewedBy,
+		CallType: body.CallType,
+		Date:     body.Date,
+		Status:   body.Status,
+	})
+	if message != "" {
+		writeError(w, http.StatusBadRequest, message)
+		return
+	}
+	var status, callType, reviewedOn string
+	err := s.db.QueryRow(r.Context(), `
+		UPDATE applications
+		SET status=$1, reviewed_by=$2, call_type=$3, reviewed_on=$4
+		WHERE id=$5 AND status NOT IN ('Approved', 'Rejected', 'Waiting', 'reviewed')
+		RETURNING status, call_type, reviewed_on
+	`, review.Status, review.ViewedBy, review.CallType, review.Date, id).Scan(&status, &callType, &reviewedOn)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var existing string
+		lookupErr := s.db.QueryRow(r.Context(), `SELECT status FROM applications WHERE id=$1`, id).Scan(&existing)
+		if errors.Is(lookupErr, pgx.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "Application not found.")
+			return
+		}
+		if lookupErr != nil {
+			writeError(w, http.StatusInternalServerError, "Could not save that review.")
+			return
+		}
+		writeError(w, http.StatusConflict, "This application is already reviewed.")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not save that review.")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"application": map[string]any{
+			"id": id, "status": status, "callType": callType, "reviewedOn": reviewedOn,
+			"reviewedBy": map[string]any{"id": "", "name": review.ViewedBy, "email": ""},
+		},
+	})
 }
 
 func (s *Server) deleteAdminApplication(w http.ResponseWriter, r *http.Request) {
